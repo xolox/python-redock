@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from os.path import abspath, dirname, join
-from setuptools import setup
+from setuptools import setup, find_packages
 
 # Find the directory containing the source distribution.
 directory = dirname(abspath(__file__))
@@ -14,12 +14,12 @@ readme_text = open(join(directory, 'README.rst'), 'r').read()
 requirements = [l.strip() for l in open(join(directory, 'requirements.txt'), 'r')]
 
 setup(name='redock',
-      version='0.1',
+      version='0.2',
       description="Human friendly wrapper around Docker",
       long_description=readme_text,
       url='https://github.com/xolox/python-redock',
       author='Peter Odding',
       author_email='peter@peterodding.com',
-      py_modules=['redock'],
-      entry_points=dict(console_scripts=['redock = redock:main']),
+      packages=find_packages(),
+      entry_points=dict(console_scripts=['redock = redock.cli:main']),
       install_requires=requirements)
