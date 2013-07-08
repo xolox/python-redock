@@ -1,7 +1,7 @@
 # Minimal configuration management system specialized to Debian/Ubuntu/Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 8, 2013
+# Last Change: July 9, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -126,17 +126,10 @@ class Bootstrap(object):
         with open(MIRROR_FILE) as handle:
             return handle.read().strip()
 
-    def update_system_packages(self, hold=('upstart', 'initscripts')):
+    def update_system_packages(self):
         """
         Perform a full upgrade of all packages inside the container.
         """
-        # https://help.ubuntu.com/community/PinningHowto#Introduction_to_Holding_Packages
-        # TODO Document why these packages are on hold.
-        try:
-            self.logger.info("Marking packages on hold: %s", ' '.join(hold))
-            self.execute('apt-mark', 'hold', *hold)
-        except RemoteCommandFailed:
-            self.logger.warn("Failed to hold packages, assuming it was done previously")
         self.execute('apt-get', 'dist-upgrade', '-q', '-y', '--no-install-recommends')
 
     def execute(self, *command, **kw):
@@ -189,14 +182,6 @@ class Bootstrap(object):
         if exit_code != 0:
             msg = "Failed to upload directory %s to %s, rsync exited with nonzero status %d! (command: %s)"
             raise RemoteCommandFailed, msg % (host_directory, location, exit_code, quote_command_line(command))
-
-    def set_default_locale(self):
-        """
-        The locale in Docker base images is not set up correctly, which causes
-        various programs (like ``apt-get``) to continuously spit out warnings.
-        This method reconfigures locale support to silence these warnings.
-        """
-        self.install_packages('language-pack-en-base')
 
 class RemoteCommandFailed(Exception):
     """

@@ -1,7 +1,7 @@
 # Human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 8, 2013
+# Last Change: July 9, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -225,16 +225,31 @@ class Container(object):
 
     def install_ssh_server(self):
         """
-        Install and configure an SSH server inside the running Docker container
-        and install a generated SSH public key.
+        Install and configure an SSH server (the package ``openssh-server``)
+        and install a generated SSH public key inside the running Docker
+        container. Because this method is Redock's first exposure to fresh
+        containers it will perform some miscellaneous tasks to initialize a
+        base image:
+
+        - Out of the box a lot of commands in Docker containers spit out
+          obnoxious warnings about the locale. Installing the
+          ``language-pack-en-base`` package resolves the problem.
+
+        - The ``initscripts`` and ``upstart`` packages are set on hold, so that
+          ``apt-get dist-upgrade`` doesn't try to upgrade these packages (doing
+          so will result in errors).
 
         Called by :py:func:`Container.start()`.
         """
         install_timer = humanfriendly.Timer()
-        self.logger.info("Installing SSH server inside container (please be patient) ..")
-        template = '{install} && mkdir -p /root/.ssh && echo {key} > /root/.ssh/authorized_keys'
-        self.wait_for_command(template.format(install=apt_get_install('openssh-server'),
-                                              key=pipes.quote(self.get_ssh_public_key())))
+        commands = []
+        # TODO Document why these packages are on hold.
+        # https://help.ubuntu.com/community/PinningHowto#Introduction_to_Holding_Packages
+        commands.append('apt-mark hold initscripts upstart')
+        commands.append(apt_get_install('language-pack-en-base', 'openssh-server'))
+        commands.append('mkdir -p /root/.ssh')
+        commands.append('echo %s > /root/.ssh/authorized_keys' % pipes.quote(self.get_ssh_public_key()))
+        self.wait_for_command(' && '.join(commands))
         self.commit(message="Installed SSH server & public key")
         self.logger.info("Installed SSH server in %s.", install_timer)
 
