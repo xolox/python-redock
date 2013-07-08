@@ -14,7 +14,7 @@ readme_text = open(join(directory, 'README.rst'), 'r').read()
 requirements = [l.strip() for l in open(join(directory, 'requirements.txt'), 'r')]
 
 setup(name='redock',
-      version='0.2',
+      version='0.3',
       description="Human friendly wrapper around Docker",
       long_description=readme_text,
       url='https://github.com/xolox/python-redock',

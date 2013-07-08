@@ -1,13 +1,12 @@
 # Human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 7, 2013
+# Last Change: July 8, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
 import os
 import pipes
-import re
 import socket
 import subprocess
 import sys
@@ -17,11 +16,12 @@ import time
 # External dependencies.
 import docker
 import humanfriendly
-import netifaces
 import update_dotdee
 
 # Initialize the logger.
 from redock.logger import logger
+from redock.utils import (apt_get_install, find_local_ip_addresses,
+                          quote_command_line, slug, summarize_id)
 
 # The default base image for new containers.
 DEFAULT_BASE_IMAGE = 'ubuntu:precise'
@@ -52,10 +52,8 @@ class Container(object):
         self.base = Image.coerce(base)
         self.hostname = hostname or self.image.tag
         self.timeout = timeout
-        self.container_id = None
-        self.custom_image = None
-        self.remote_terminal = None
         self.update_dotdee = update_dotdee.UpdateDotDee(os.path.expanduser('~/.ssh/config'))
+        self.session = Session()
 
     def initialize(self):
         """
@@ -75,9 +73,10 @@ class Container(object):
         if self.find_running_container():
             self.detach()
             self.logger.info("Killing container ..")
-            self.docker.kill(self.container_id)
+            self.docker.kill(self.session.container_id)
             self.logger.info("Removing container ..")
-            self.docker.remove_container(self.container_id)
+            self.docker.remove_container(self.session.container_id)
+            self.session.reset()
         self.revoke_ssh_access()
 
     def initialize_client(self):
@@ -110,41 +109,41 @@ class Container(object):
                 self.initialize_base_image()
             else:
                 self.start_ssh_server()
-            self.setup_ssh_access()
+        self.setup_ssh_access()
 
     def attach(self):
         """
         Attach to the container so the user knows what they are waiting for.
         """
         self.check_container_active()
-        if not self.remote_terminal:
+        if not self.session.remote_terminal:
             self.logger.verbose("Attaching to container's terminal using command: docker attach %s",
-                                summarize_id(self.container_id))
-            self.remote_terminal = subprocess.Popen(['docker', 'attach', self.container_id],
-                                                    stdin=open(os.devnull),
-                                                    stdout=sys.stderr)
+                                summarize_id(self.session.container_id))
+            self.session.remote_terminal = subprocess.Popen(['docker', 'attach', self.session.container_id],
+                                                            stdin=open(os.devnull),
+                                                            stdout=sys.stderr)
 
     def detach(self):
         """
         Detach from the container.
         """
-        if self.remote_terminal:
-            if self.remote_terminal.poll() is None:
-                self.remote_terminal.kill()
-            self.remote_terminal = None
+        if self.session.remote_terminal:
+            if self.session.remote_terminal.poll() is None:
+                self.session.remote_terminal.kill()
+            self.session.remote_terminal = None
 
     def find_running_container(self):
         """
         Check to see if the current container is already running.
         """
-        if not self.container_id:
+        if not self.session.container_id:
             self.logger.info("Looking for running container ..")
             for container in self.docker.containers():
                 if container.get('Image') == self.image.name:
-                    self.container_id = container['Id']
+                    self.session.container_id = container['Id']
                     self.logger.info("Found running container: %s",
-                                     summarize_id(self.container_id))
-        return bool(self.container_id)
+                                     summarize_id(self.session.container_id))
+        return bool(self.session.container_id)
 
     def find_custom_image(self):
         """
@@ -153,14 +152,14 @@ class Container(object):
         :returns: A :py:class:`Image` instance if an existing image was found,
                   ``None`` otherwise.
         """
-        if not self.custom_image:
+        if not self.session.custom_image:
             self.logger.debug("Looking for existing image: %r", self.image)
-            self.custom_image = self.find_named_image(self.image)
-            if self.custom_image:
-                self.logger.debug("Found existing image: %r", self.custom_image)
+            self.session.custom_image = self.find_named_image(self.image)
+            if self.session.custom_image:
+                self.logger.debug("Found existing image: %r", self.session.custom_image)
             else:
                 self.logger.debug("No existing image found.")
-        return self.custom_image
+        return self.session.custom_image
 
     def download_base_image(self):
         """
@@ -211,7 +210,7 @@ class Container(object):
         command_line = template.format(install=apt_get_install('openssh-server'),
                                        key=pipes.quote(self.get_ssh_public_key()))
         self.fork_command_through_docker(command_line)
-        self.docker.wait(self.container_id)
+        self.docker.wait(self.session.container_id)
         self.commit_changes(message="Installed SSH server & public key")
         self.logger.info("Installed SSH server in %s.", install_timer)
 
@@ -270,7 +269,6 @@ class Container(object):
         """
         self.logger.verbose("Configuring SSH access ..")
         with open(self.ssh_config_file, 'w') as handle:
-            ip_address, port_number = self.ssh_endpoint
             handle.write(textwrap.dedent("""
                 Host {alias}
                   Hostname {address}
@@ -313,17 +311,17 @@ class Container(object):
         SSH.
         """
         self.check_container_active()
-        if hasattr(self, 'cached_ssh_endpoint'):
-            return self.cached_ssh_endpoint
+        if self.session.ssh_endpoint:
+            return self.session.ssh_endpoint
         # Get the local port connected to the container.
-        host_port = int(self.docker.port(self.container_id, '22'))
+        host_port = int(self.docker.port(self.session.container_id, '22'))
         self.logger.debug("Configured port redirection for container %s: %s:%i -> %s:%i",
-                          summarize_id(self.container_id),
+                          summarize_id(self.session.container_id),
                           socket.gethostname(), host_port,
                           self.hostname, 22)
         # Give the container time to finish the SSH server installation.
         self.logger.verbose("Waiting for SSH connection to %s (max %i seconds) ..",
-                            summarize_id(self.container_id), self.timeout)
+                            summarize_id(self.session.container_id), self.timeout)
         global_timeout = time.time() + self.timeout
         ssh_timer = humanfriendly.Timer()
         while time.time() < global_timeout:
@@ -342,9 +340,11 @@ class Container(object):
                     self.logger.debug("Attempt to connect timed out!")
                 if ssh_client.returncode == 0:
                     # At this point we have successfully connected!
-                    self.cached_ssh_endpoint = (ip_address, host_port)
-                    self.logger.debug("Connected to %s at %s using SSH in %s.", self.image.name, self.ssh_endpoint, ssh_timer)
-                    return self.cached_ssh_endpoint
+                    self.session.ssh_endpoint = (ip_address, host_port)
+                    self.logger.debug("Connected to %s at %s using SSH in %s.",
+                                      self.image.name, self.session.ssh_endpoint,
+                                      ssh_timer)
+                    return self.session.ssh_endpoint
                 time.sleep(1)
         msg = "Time ran out while waiting to connect to container %s over SSH! (Most likely something went wrong while initializing the container..)"
         raise Exception, msg % self.image.name
@@ -358,7 +358,7 @@ class Container(object):
                         (a string).
         """
         self.fork_command_through_docker(command)
-        self.docker.wait(self.container_id)
+        self.docker.wait(self.session.container_id)
 
     def fork_command_through_docker(self, command):
         """
@@ -380,11 +380,11 @@ class Container(object):
                                               hostname=self.hostname,
                                               ports=['22'])
         # Remember and report the container id.
-        self.container_id = result['Id']
-        self.logger.debug("Created container: %s", summarize_id(self.container_id))
+        self.session.container_id = result['Id']
+        self.logger.debug("Created container: %s", summarize_id(self.session.container_id))
         # Start the command inside the container.
         self.logger.debug("Running command: %s", command)
-        self.docker.start(self.container_id)
+        self.docker.start(self.session.container_id)
         # Make sure the user sees all output from the container.
         self.attach()
 
@@ -395,7 +395,7 @@ class Container(object):
         self.initialize_client()
         self.check_container_active()
         self.logger.verbose("Committing changes: %s", message or 'no description given')
-        self.docker.commit(self.container_id, repository=self.image.repository,
+        self.docker.commit(self.session.container_id, repository=self.image.repository,
                            tag=self.image.tag, message=message, author=author)
         self.stop()
         self.initialize()
@@ -448,7 +448,7 @@ class Container(object):
         """
         Make sure a container is active.
         """
-        if not (self.container_id or self.find_running_container()):
+        if not (self.session.container_id or self.find_running_container()):
             raise Exception, "No active container!"
 
     def create_directory(self, directory):
@@ -526,77 +526,15 @@ class Image(object):
             properties.append("id=%r" % summarize_id(self.id))
         return "Image(%s)" % ", ".join(properties)
 
-def find_local_ip_addresses():
-    """
-    To connect to a running Docker container over SSH (TCP) we need to connect
-    to a specific port number on an IP address associated with a local network
-    interface:
+class Session(object):
 
-        Please note that because of how routing works
-        connecting to localhost or 127.0.0.1 won't work.
+    def __init__(self):
+        self.reset()
 
-    See also: http://docs.docker.io/en/latest/use/basics/
-
-    :returns: A :py:class:`set` of IP addresses associated with local network
-              interfaces.
-    """
-    ip_addresses = set()
-    for name in sorted(netifaces.interfaces(), key=str.lower):
-        for addresses in netifaces.ifaddresses(name).values():
-            for properties in addresses:
-                address = properties.get('addr')
-                # As mentioned above we're specifically *not* interested in loop back interfaces.
-                if address.startswith('127.'):
-                    continue
-                # I'm not interested in IPv6 addresses right now.
-                if ':' in address:
-                    continue
-                if address:
-                    ip_addresses.add(address)
-    return ip_addresses
-
-def apt_get_install(*packages):
-    """
-    Generate a command to install the given packages with ``apt-get``.
-
-    :param packages: The names of the package(s) to be installed.
-    :returns: The ``ap-get`` command line as a single string.
-    """
-    command = ['DEBIAN_FRONTEND=noninteractive',
-               'apt-get', 'install', '-q', '-y',
-               '--no-install-recommends']
-    return quote_command_line(command + list(packages))
-
-def quote_command_line(command):
-    """
-    Quote the tokens in a shell command line.
-
-    :param command: A list with the command name and arguments.
-    :returns: The command line as a single string.
-    """
-    return ' '.join(pipes.quote(s) for s in command)
-
-def summarize_id(id):
-    """
-    Docker uses hexadecimal strings of 65 characters to uniquely identify
-    containers, images and other objects. Docker's API always reports
-    full IDs of 65 characters, but the ``docker`` program abbreviates
-    these IDs to 12 characters in the user interface. We do the same
-    because it makes the output a lot user friendlier.
-
-    :param id: A hexadecimal ID of 65 characters.
-    :returns: A summarized ID of 12 characters.
-    """
-    return id[:12]
-
-def slug(text):
-    """
-    Convert text to a "slug".
-
-    :param text: The original text, e.g. "Some Random Text!".
-    :returns: The slug text, e.g. "some-random-text".
-    """
-    slug = re.sub('[^a-z0-9]+', '-', text.lower())
-    return slug.strip('-')
+    def reset(self):
+        self.container_id = None
+        self.custom_image = None
+        self.remote_terminal = None
+        self.ssh_endpoint = None
 
 # vim: ts=4 sw=4 et
