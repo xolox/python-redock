@@ -6,7 +6,7 @@ container engine`_. Docker implements a lightweight form of virtualization_
 that makes it possible to start and stop virtual machines in less than a
 second. Before Docker the use of virtualization meant conventional virtual
 machines with all of the associated bloat. Docker makes it ridiculously cheap
-and fast to create/start/stop/snapshot containers. This opens up exciting new
+and fast to start/save/kill containers. This opens up exciting new
 possibilities for DevOps:
 
 - Complex build environments can be split up into isolated containers where
@@ -55,23 +55,25 @@ SSH_ using the name you gave to the container suffixed with ``-container``::
 This works because your ``~/.ssh/config`` has been updated to include a host
 definition for the container. This means you can connect using rsync_ or
 anything else which works on top of SSH_ (e.g. to bootstrap a configuration
-management system). When you're done you can kill the container::
+management system). When you're done playing around with the container you can
+save your changes with the following command::
 
-    $ redock stop test
-
-This will discard all changes made to the file system inside the container. To
-save the changes before killing the container you use the following command::
-
-    $ redock save test
+    $ redock commit test
 
 This command will persist the state of the container's file system in a Docker
 image. The next time you run ``redock`` with the same name it will create a
-container based on the disk image.
+container based on the disk image. To stop and delete a running container you
+use the following command::
+
+    $ redock kill test
+
+This will discard all changes made to the file system inside the container
+since the last time that ``redock commit`` was used.
 
 Contact
 -------
 
-The latest version of ``redock`` is available on PyPi_ and GitHub_. For bug
+The latest version of ``redock`` is available on PyPI_ and GitHub_. For bug
 reports please create an issue on GitHub_. If you have questions, suggestions,
 etc. feel free to send me an e-mail at `peter@peterodding.com`_.
 
@@ -89,7 +91,7 @@ This software is licensed under the `MIT license`_.
 .. _Linux container engine: http://en.wikipedia.org/wiki/LXC
 .. _MIT license: http://en.wikipedia.org/wiki/MIT_License
 .. _peter@peterodding.com: peter@peterodding.com
-.. _PyPi: https://pypi.python.org/pypi/redock
+.. _PyPI: https://pypi.python.org/pypi/redock
 .. _rsync: http://en.wikipedia.org/wiki/Rsync
 .. _SSH: http://en.wikipedia.org/wiki/Secure_Shell
 .. _virtualization: http://en.wikipedia.org/wiki/Virtualization

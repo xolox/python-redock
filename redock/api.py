@@ -32,7 +32,19 @@ SSH_KEY_CATALOG = os.path.expanduser('~/.redock/ssh')
 class Container(object):
 
     """
-    Simple representation of Docker containers.
+    The :py:class:`Container` class is the main entry point to the Redock API.
+    It aims to provide a simple to use representation of Docker containers.
+    You'll probably never need most of the methods defined in this class; if
+    you're getting started with Redock you should focus on these methods:
+
+    - :py:func:`Container.start()`
+    - :py:func:`Container.commit()`
+    - :py:func:`Container.kill()`
+
+    After you create and start a container with Redock you can do with the
+    container what you want by starting out with an SSH connection. When you're
+    done you either save your changes or discard them and kill the container.
+    That's probably all you need from Redock :-)
     """
 
     def __init__(self, image, base=DEFAULT_BASE_IMAGE, hostname=None, timeout=10):
@@ -47,29 +59,55 @@ class Container(object):
         :param timeout: The timeout while waiting for a container to become
                         reachable over SSH.
         """
-        self.logger = logger
+        # Validate and store the arguments.
         self.image = Image.coerce(image)
         self.base = Image.coerce(base)
         self.hostname = hostname or self.image.tag
         self.timeout = timeout
-        self.update_dotdee = update_dotdee.UpdateDotDee(os.path.expanduser('~/.ssh/config'))
+        # Initialize some private variables.
+        self.logger = logger
         self.session = Session()
+        self.update_dotdee = update_dotdee.UpdateDotDee(os.path.expanduser('~/.ssh/config'))
+        # Connect to the Docker API over HTTP.
+        try:
+            self.logger.debug("Connecting to Docker daemon ..")
+            self.docker = docker.Client()
+            self.logger.debug("Successfully connected to Docker.")
+        except Exception, e:
+            self.logger.error("Failed to connect to Docker!")
+            self.logger.exception(e)
+            raise
 
-    def initialize(self):
+    def start(self):
         """
-        Connect to Docker, create the container if it doesn't exist yet,
-        install and configure an SSH server in the container and wait for the
-        container to become reachable over SSH.
-        """
-        self.initialize_client()
-        self.initialize_container()
+        Create and start the Docker container:
 
-    def stop(self):
+        1. Download the base image using
+           :py:func:`Container.download_base_image()` (only if needed).
+        2. Install and configure an SSH server and install a generated SSH
+           private key using :py:func:`Container.install_ssh_server()` (only if
+           needed).
+        3. Start the SSH server using
+           :py:func:`Container.start_ssh_server()`.
+        4. Configure SSH access to the container using
+           :py:func:`Container.setup_ssh_access()`.
+        5. Wait for the container to become reachable over SSH.
         """
-        Stop and remove the container. All changes  since the last time that
-        :py:func:`Container.commit_changes()` was called will be lost.
+        if not self.find_running_container():
+            if not self.find_custom_image():
+                self.logger.info("Image doesn't exist yet, creating it: %r", self.image)
+                self.download_base_image()
+                self.install_ssh_server()
+                self.start_ssh_server()
+            else:
+                self.start_ssh_server()
+        self.setup_ssh_access()
+
+    def kill(self):
         """
-        self.initialize_client()
+        Kill and delete the container. All changes  since the last time that
+        :py:func:`Container.commit()` was called will be lost.
+        """
         if self.find_running_container():
             self.detach()
             self.logger.info("Killing container ..")
@@ -79,41 +117,18 @@ class Container(object):
             self.session.reset()
         self.revoke_ssh_access()
 
-    def initialize_client(self):
-        """
-        Initialize the Docker client and connect to the Docker API server.
-        """
-        if not hasattr(self, 'docker'):
-            try:
-                self.logger.debug("Connecting to Docker daemon ..")
-                self.docker = docker.Client()
-                self.logger.debug("Successfully connected to Docker.")
-            except Exception, e:
-                self.logger.error("Failed to connect to Docker!")
-                self.logger.exception(e)
-                raise
-
-    def initialize_container(self):
-        """
-        Initialize the Docker container:
-        
-        1. Download the base image (only when needed).
-        2. Install and configure an SSH server (only when needed).
-        3. Start the SSH server.
-        4. Wait for the container to become reachable over SSH.
-        """
-        if not self.find_running_container():
-            if not self.find_custom_image():
-                self.logger.info("Image %r doesn't exist yet, creating it ..", self.image)
-                self.download_base_image()
-                self.initialize_base_image()
-            else:
-                self.start_ssh_server()
-        self.setup_ssh_access()
-
     def attach(self):
         """
-        Attach to the container so the user knows what they are waiting for.
+        Attach to the running Docker container in a subprocess so that the user
+        can see the output of whatever is happening inside the container on
+        their terminal. This is similar to the ``docker attach`` command except
+        it does not open an interactive terminal.
+
+        Automatically called by :py:func:`Container.fork_command()`
+        so the user gets to see the output of the command that was started.
+
+        Raises :py:class:`NoContainerRunning` if an associated Docker container
+        is not already running.
         """
         self.check_container_active()
         if not self.session.remote_terminal:
@@ -125,7 +140,11 @@ class Container(object):
 
     def detach(self):
         """
-        Detach from the container.
+        Detach from the running container. This kills the subprocess that
+        relays the output from the container. It is not an error if
+        :py:func:`Container.attach()` was not previously called.
+
+        Automatically called by :py:func:`Container.kill()`.
         """
         if self.session.remote_terminal:
             if self.session.remote_terminal.poll() is None:
@@ -134,7 +153,11 @@ class Container(object):
 
     def find_running_container(self):
         """
-        Check to see if the current container is already running.
+        Check to see if the current :py:class:`Container` has an associated
+        Docker container that is currently running.
+
+        :returns: ``True`` when a running container exists, ``False``
+                  otherwise.
         """
         if not self.session.container_id:
             self.logger.info("Looking for running container ..")
@@ -147,9 +170,11 @@ class Container(object):
 
     def find_custom_image(self):
         """
-        Look for an existing image belonging to the container.
+        Look for an existing image belonging to the container (i.e. an image
+        with the repository and tag specified as the ``name`` argument to the
+        constructor of :py:class:`Container`).
 
-        :returns: A :py:class:`Image` instance if an existing image was found,
+        :returns: An :py:class:`Image` instance if an existing image is found,
                   ``None`` otherwise.
         """
         if not self.session.custom_image:
@@ -163,12 +188,18 @@ class Container(object):
 
     def download_base_image(self):
         """
-        Download the base image required to create the container.
+        Download the base image required to create the container. Uses the base
+        image specified in the constructor of :py:class:`Container`. If the
+        base image is not available yet it is assumed to be a public image. If
+        the base image is already available locally it won't be downloaded
+        again.
+
+        Automatically called by :py:func:`Container.start()` as needed.
         """
         self.logger.verbose("Looking for existing base image of %s ..", self.image)
         if not self.find_named_image(self.base):
             download_timer = humanfriendly.Timer()
-            self.logger.info("Downloading base image: %s", self.base)
+            self.logger.info("Downloading base image (please be patient): %s", self.base)
             self.docker.pull(repository=self.base.repository, tag=self.base.tag)
             self.logger.info("Finished downloading base image in %s.", download_timer)
 
@@ -192,52 +223,56 @@ class Container(object):
                          tag=image['Tag'],
                          id=image['Id'])
 
-    def initialize_base_image(self):
-        """
-        Initialize a custom image from a base image by installing an SSH server
-        and a generated SSH public key.
-        """
-        self.install_ssh_server()
-        self.start_ssh_server()
-
     def install_ssh_server(self):
         """
-        Install and configure an SSH server inside a container.
+        Install and configure an SSH server inside the running Docker container
+        and install a generated SSH public key.
+
+        Called by :py:func:`Container.start()`.
         """
         install_timer = humanfriendly.Timer()
         self.logger.info("Installing SSH server inside container (please be patient) ..")
         template = '{install} && mkdir -p /root/.ssh && echo {key} > /root/.ssh/authorized_keys'
-        command_line = template.format(install=apt_get_install('openssh-server'),
-                                       key=pipes.quote(self.get_ssh_public_key()))
-        self.fork_command_through_docker(command_line)
-        self.docker.wait(self.session.container_id)
-        self.commit_changes(message="Installed SSH server & public key")
+        self.wait_for_command(template.format(install=apt_get_install('openssh-server'),
+                                              key=pipes.quote(self.get_ssh_public_key())))
+        self.commit(message="Installed SSH server & public key")
         self.logger.info("Installed SSH server in %s.", install_timer)
 
     def start_ssh_server(self):
         """
+        Starts the container and runs an SSH server inside the container.
+
         We have to start the SSH server ourselves because Docker replaces
         ``/sbin/init`` inside the container, which means ``sshd`` is not
         managed by upstart. Also Docker works on the principle of running some
         main application in the foreground; in our case it will be ``sshd``.
+
+        In the future Redock might be changed to use e.g. Supervisor, but for
+        now ``sshd`` will do just fine :-)
         """
         self.logger.info("Starting SSH server ..")
         command_line = 'mkdir -p -m0755 /var/run/sshd && /usr/sbin/sshd -eD'
-        self.fork_command_through_docker(command_line)
+        self.fork_command(command_line)
 
     def get_ssh_client_command(self, ip_address=None, port_number=None):
         """
-        Generate an SSH client command line that connects to the container.
+        Generate an SSH client command line that connects to the container
+        (assumed to be running).
 
-        :param binary: ``True`` if the SSH client command line should include
-                       ``-e none``, ``False`` otherwise.
-        :param include_ip: 
+        :param ip_address: This optional argument overrides the default IP
+                           address (which is otherwise automatically
+                           discovered).
+        :param port_number: This optional argument overrides the default port
+                            number (which is otherwise automatically
+                            discovered).
+        :returns: The SSH client command line as a list of strings containing
+                  the command and its arguments.
         """
         command = ['ssh']
         # Connect as the root user inside the container.
         command.extend(['-l', 'root'])
         # Connect using the generated SSH private key.
-        command.extend(['-i', self.get_ssh_private_key()])
+        command.extend(['-i', self.get_ssh_private_key_file()])
         # Don't check or store the host key (it's pointless).
         command.extend(['-o', 'StrictHostKeyChecking=no'])
         command.extend(['-o', 'UserKnownHostsFile=/dev/null'])
@@ -264,8 +299,8 @@ class Container(object):
 
     def setup_ssh_access(self):
         """
-        Update ~/.ssh/config so the container can be started by connecting to
-        it over SSH.
+        Update ``~/.ssh/config`` to include a host definition that makes it
+        easy to connect to the container over SSH from the host system.
         """
         self.logger.verbose("Configuring SSH access ..")
         with open(self.ssh_config_file, 'w') as handle:
@@ -280,7 +315,7 @@ class Container(object):
             """.format(alias=self.ssh_alias,
                        address=self.ssh_endpoint[0],
                        port=self.ssh_endpoint[1],
-                       key=self.get_ssh_private_key(),
+                       key=self.get_ssh_private_key_file(),
                        redock=pipes.quote(os.path.abspath(sys.argv[0])),
                        container=pipes.quote(self.image.name))))
         self.update_dotdee.update_file()
@@ -288,7 +323,7 @@ class Container(object):
 
     def revoke_ssh_access(self):
         """
-        Remove the container's SSH client configuration and update
+        Remove the container's SSH client configuration from
         ``~/.ssh/config``.
         """
         self.logger.info("Removing SSH client configuration ..")
@@ -306,9 +341,9 @@ class Container(object):
     @property
     def ssh_endpoint(self):
         """
-        Wait for the container to become reachable over SSH and return the (IP
-        address, port number) that can be used to connect to the container over
-        SSH.
+        Wait for the container to become reachable over SSH and get a tuple
+        with the IP address and port number that can be used to connect to the
+        container over SSH.
         """
         self.check_container_active()
         if self.session.ssh_endpoint:
@@ -347,9 +382,9 @@ class Container(object):
                     return self.session.ssh_endpoint
                 time.sleep(1)
         msg = "Time ran out while waiting to connect to container %s over SSH! (Most likely something went wrong while initializing the container..)"
-        raise Exception, msg % self.image.name
+        raise SecureShellTimeout, msg % self.image.name
 
-    def wait_for_docker_command(self, command):
+    def wait_for_command(self, command):
         """
         Create the container, start it, run the given command and wait for the
         command to finish.
@@ -357,14 +392,16 @@ class Container(object):
         :param command: The Bash command line to execute inside the container
                         (a string).
         """
-        self.fork_command_through_docker(command)
+        self.fork_command(command)
         self.docker.wait(self.session.container_id)
 
-    def fork_command_through_docker(self, command):
+    def fork_command(self, command):
         """
-        Create and start the container, fork the given command inside the
+        Create and start a Docker container, fork the given command inside the
         container and return control to the caller without waiting for the
-        command inside the container to finish.
+        command inside the container to finish. If an existing image exists for
+        the container, it will be used to start the container. Otherwise the
+        base image is used.
 
         :param command: The Bash command line to execute inside the container
                         (a string).
@@ -388,17 +425,23 @@ class Container(object):
         # Make sure the user sees all output from the container.
         self.attach()
 
-    def commit_changes(self, message=None, author=None):
+    def commit(self, message=None, author=None):
         """
-        Commit any changes to the container.
+        Commit any changes to the running container. Corresponds to the
+        ``docker commit`` command.
+
+        Raises :py:class:`NoContainerRunning` if an associated Docker container
+        is not already running.
+
+        :param message: A short message describing the commit (a string).
+        :param author: The name of the author (a string).
         """
-        self.initialize_client()
         self.check_container_active()
         self.logger.verbose("Committing changes: %s", message or 'no description given')
         self.docker.commit(self.session.container_id, repository=self.image.repository,
                            tag=self.image.tag, message=message, author=author)
-        self.stop()
-        self.initialize()
+        self.kill()
+        self.start()
 
     def __repr__(self):
         """
@@ -407,15 +450,17 @@ class Container(object):
         template = "Container(image=%r, base=%r, hostname=%r)"
         return template % (self.image, self.base, self.hostname)
 
-    def get_ssh_private_key(self):
+    def get_ssh_private_key_file(self):
         """
-        Get the SSH private key associated with the container.
+        Get the pathname of the SSH private key associated with the container.
         """
         return os.path.join(SSH_KEY_CATALOG, self.image.name)
 
     def get_ssh_public_key(self):
         """
-        Get the SSH public key associated with the container.
+        Get the contents of the SSH public key associated with the container.
+        If the container doesn't have an associated SSH key pair yet, it will
+        be generated first using :py:func:`Container.generate_ssh_key_pair()`.
         """
         public_key_file = os.path.join(SSH_KEY_CATALOG, '%s.pub' % self.image.name)
         if not os.path.isfile(public_key_file):
@@ -426,11 +471,14 @@ class Container(object):
     def generate_ssh_key_pair(self):
         """
         Generate an SSH key pair for communication between the host system and
-        the Docker container.
+        the Docker container. Requires the ``ssh-keygen`` program.
+
+        Raises :py:class:`FailedToGenerateKey` if ``ssh-keygen`` fails.
         """
         self.logger.verbose("Checking if we need to generate a new SSH key pair ..")
-        self.create_directory(SSH_KEY_CATALOG)
-        private_key_file = self.get_ssh_private_key()
+        if not os.path.isdir(SSH_KEY_CATALOG):
+            os.makedirs(SSH_KEY_CATALOG)
+        private_key_file = self.get_ssh_private_key_file()
         if os.path.isfile(private_key_file):
             self.logger.verbose("SSH key pair was previously generated: %s", private_key_file)
         else:
@@ -440,23 +488,18 @@ class Container(object):
             stdout, stderr = ssh_keygen.communicate(input='')
             if ssh_keygen.returncode != 0:
                 msg = "Failed to generate SSH key pair! (command exited with nonzero exit code %d: %r)"
-                raise Exception, msg % (ssh_keygen.returncode, command)
+                raise FailedToGenerateKey, msg % (ssh_keygen.returncode, command)
 
     # Miscellaneous methods.
 
     def check_container_active(self):
         """
-        Make sure a container is active.
+        Check if the :py:class:`Container` is associated with a running Docker
+        container. If no running Docker container is found,
+        :py:class:`NoContainerRunning` is raised.
         """
         if not (self.session.container_id or self.find_running_container()):
-            raise Exception, "No active container!"
-
-    def create_directory(self, directory):
-        """
-        Create a directory if it doesn't exist yet.
-        """
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
+            raise NoContainerRunning, "No active container!"
 
 class Image(object):
 
@@ -479,10 +522,14 @@ class Image(object):
     @staticmethod
     def coerce(value):
         """
-        Coerce the value given as the first argument to an :py:class:`Image`.
+        Coerce strings to :py:class:`Image` objects.
 
-        :param value: The name of the image, expected to be a string containing
-                      the image's repository and tag, separated by a colon.
+        Raises :py:class:`ValueError` when a string with an incorrect format is
+        given.
+
+        :param value: The name of the image, expected to be a string of the
+                      form ``repository:tag``. If an :py:class:`Image` object
+                      is given it is returned unmodified.
         :returns: An :py:class:`Image` object.
         """
         if isinstance(value, basestring):
@@ -501,15 +548,17 @@ class Image(object):
     @property
     def name(self):
         """
-        Get the human readable name of an :py:class:`Image` as a string in the
-        format ``repository:tag``.
+        Get the human readable name of an :py:class:`Image` as a string of the
+        form ``repository:tag``.
         """
         return "%s:%s" % (self.repository, self.tag)
 
     @property
     def unique_name(self):
         """
-        Get the machine readable unique name of an :py:class:`Image`.
+        Get the machine readable unique name of an :py:class:`Image`. If the
+        image has a unique hash that will be used, otherwise a string of the
+        form ``repository:tag`` is returned.
         """
         if self.id:
             return self.id
@@ -536,5 +585,25 @@ class Session(object):
         self.custom_image = None
         self.remote_terminal = None
         self.ssh_endpoint = None
+
+class SecureShellTimeout(Exception):
+    """
+    Custom exception raised by :py:func:`Container.ssh_endpoint` when Redock
+    fails to connect to the Docker container within a reasonable amount of
+    time.
+    """
+
+class FailedToGenerateKey(Exception):
+    """
+    Custom exception raised by :py:func:`Container.generate_ssh_key_pair()`
+    when the ``ssh-keygen`` program fails to generate an SSH key pair.
+    """
+
+class NoContainerRunning(Exception):
+    """
+    Custom exception raised by :py:func:`Container.check_container_active`
+    when a :py:class:`Container` doesn't have an associated Docker container
+    running.
+    """
 
 # vim: ts=4 sw=4 et

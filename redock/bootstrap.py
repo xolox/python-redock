@@ -6,6 +6,7 @@
 
 # Standard library modules.
 import os
+import os.path
 import pipes
 import subprocess
 import urllib
@@ -17,6 +18,8 @@ from humanfriendly import Timer
 # Modules included in our package.
 from redock.logger import logger
 from redock.utils import quote_command_line
+
+MIRROR_FILE = os.path.expanduser('~/.redock/ubuntu-mirror.txt')
 
 class Bootstrap(object):
 
@@ -33,27 +36,25 @@ class Bootstrap(object):
     - SSH is used to connect to remote hosts because it's the lowest common
       denominator that works with Docker, VirtualBox, XenServer and physical
       servers while being secure and easy to use.
+
+    Right now :py:class:`Bootstrap` is specialized to Ubuntu 12.04 systems
+    (Docker containers) but there's no reason why it has to be like this.
     """
 
     def __init__(self, ssh_alias):
         """
-        Initialize the configuration management system.
+        Initialize the configuration management system by creating an
+        ``execnet`` gateway over an SSH connection. First we make sure the
+        ``python2.7`` package is installed; without it ``execnet`` won't
+        work.
 
         :param ssh_alias: Alias of remote host in SSH client configuration.
         """
         self.logger = logger
         self.ssh_alias = ssh_alias
-        self.initialize_execnet()
-
-    def initialize_execnet(self):
-        """
-        Initialize the ``execnet`` gateway over an SSH connection. First we
-        make sure the ``python2.7`` package is installed; without it
-        ``execnet`` won't work.
-        """
         self.logger.info("%s: Making sure the `python2.7' package is installed ..", self.ssh_alias)
         self.install_packages('python2.7')
-        self.logger.info("%s: Initializing `execnet' connection ..", self.ssh_alias)
+        self.logger.info("%s: Initializing execnet over SSH connection ..", self.ssh_alias)
         self.gateway = makegateway("ssh=%s" % self.ssh_alias)
 
     def upload_file(self, pathname, contents):
@@ -87,30 +88,43 @@ class Bootstrap(object):
         Configure the remote package management system (``apt-get``) by
         overwriting ``/etc/apt/sources.list``. Picks a nearby Ubuntu package
         mirror and enables the given repositories (by default only the ``main``
-        repository is enabled).
+        repository is enabled). After enabling the repositories, the package
+        lists are updated by running ``apt-get update``.
 
-        :param names: The names of the package repositories to enable.
+        :param repositories: The names of the package repositories to enable.
         """
         # By default only the main area is enabled.
         if not repositories:
             repositories = ('main',)
         self.logger.info("Enabling package repositories: %s", ' '.join(repositories))
-        # Find an Ubuntu mirror that is geographically close to the current location.
-        # TODO Pick a mirror once, remember in ~/.redock/mirror.txt?
-        mirrors_txt = 'http://mirrors.ubuntu.com/mirrors.txt'
-        self.logger.debug("Finding nearby Ubuntu package mirror using %s ..", mirrors_txt)
-        mirror = urllib.urlopen(mirrors_txt).readline().strip()
-        self.logger.debug("Selected mirror: %s", mirror)
         # Generate the contents of `/etc/apt/sources.list'.
         template = 'deb {mirror} {channel} {repositories}\n'
         repositories = ' '.join(repositories)
         lines = []
         for channel in ['precise', 'precise-updates', 'precise-backports', 'precise-security']:
-            lines.append(template.format(mirror=mirror,
+            lines.append(template.format(mirror=self.select_ubuntu_mirror(),
                                          channel=channel,
                                          repositories=repositories))
         self.upload_file('/etc/apt/sources.list', ''.join(lines))
         self.execute('apt-get', 'update')
+
+    def select_ubuntu_mirror(self):
+        """
+        Find an Ubuntu mirror that is geographically close to the current
+        location for use inside Docker containers. We remember the choice in a
+        file on the host system so that we always configure the same mirror in
+        Docker containers (if you change the mirror, ``apt-get`` has to
+        download all package metadata again, wasting a lot of time).
+        """
+        if not os.path.isfile(MIRROR_FILE):
+            url = 'http://mirrors.ubuntu.com/mirrors.txt'
+            self.logger.debug("Finding nearby Ubuntu package mirror using %s ..", url)
+            mirror = urllib.urlopen(url).readline().strip()
+            with open(MIRROR_FILE, 'w') as handle:
+                handle.write('%s\n' % mirror)
+            self.logger.debug("Selected mirror: %s", mirror)
+        with open(MIRROR_FILE) as handle:
+            return handle.read().strip()
 
     def update_system_packages(self, hold=('upstart', 'initscripts')):
         """
@@ -131,6 +145,7 @@ class Bootstrap(object):
         command is immediately visible on the local terminal.
 
         :param command: The command and its arguments.
+        :param input: The standard input for the command (a string).
         """
         command = ['ssh', '-t', self.ssh_alias] + list(command)
         self.logger.info("%s: Executing command %s", self.ssh_alias, ' '.join(command))

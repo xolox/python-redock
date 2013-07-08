@@ -1,7 +1,7 @@
 # Command line interface for the redock program.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 7, 2013
+# Last Change: July 8, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -54,7 +54,7 @@ def main():
         if len(arguments) < 2:
             usage()
             return
-        supported_actions = ('start', 'stop', 'save')
+        supported_actions = ('start', 'commit', 'kill')
         action = arguments.pop(0)
         if action not in supported_actions:
             msg = "Action not supported: %r (supported actions are: %s)"
@@ -71,23 +71,22 @@ def main():
                                   base=Image.coerce(base),
                                   hostname=hostname)
             if action == 'start':
-                container.initialize()
+                container.start()
                 if len(arguments) == 1 and all(os.isatty(n) for n in range(3)):
                     ssh_timer = Timer()
                     logger.info("Detected interactive terminal, connecting to container ..")
                     ssh_client = subprocess.Popen(['ssh', container.ssh_alias])
                     ssh_client.wait()
                     if ssh_client.returncode == 0:
-                        logger.info("SSH client exited with status %i after %s.",
-                                    ssh_client.returncode, ssh_timer)
+                        logger.info("SSH client exited after %s.", ssh_timer)
                     else:
                         logger.warn("SSH client exited with status %i after %s.",
                                     ssh_client.returncode, ssh_timer)
                 container.detach()
-            elif action == 'stop':
-                container.stop()
-            elif action == 'save':
-                container.commit_changes(message=message)
+            elif action == 'commit':
+                container.commit(message=message)
+            elif action == 'kill':
+                container.kill()
             else:
                 # Programming error...
                 assert False, "Unhandled action!"
@@ -103,13 +102,13 @@ def usage():
         Usage: redock [OPTIONS] ACTION CONTAINER..
 
         Create and manage Docker containers and images. Supported actions are
-        `start', `ssh' and `stop'.
+        `start', `commit' and `kill'.
 
         Supported options:
 
           -b, --base=IMAGE     override the base image (defaults to {base})
           -n, --hostname=NAME  set container host name (defaults to image tag)
-          -m, --message=TEXT   message for image created with `save' action
+          -m, --message=TEXT   message for image created with `commit' action
           -v, --verbose        make more noise (can be repeated)
           -h, --help           show this message and exit
     """).strip()
