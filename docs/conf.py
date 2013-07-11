@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.abspath('..'))
 # Sphinx extension module names.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx']
 
+# Include __init__ in class documentation.
+autoclass_content = 'both'
+
 # Paths that contain templates, relative to this directory.
 templates_path = ['templates']
 

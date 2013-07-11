@@ -1,7 +1,7 @@
-# Command line interface for the redock program.
+# Command line interface for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 8, 2013
+# Last Change: July 11, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -16,8 +16,11 @@ import textwrap
 from humanfriendly import Timer
 
 # Modules included in our package.
-from redock.api import Container, Image, DEFAULT_BASE_IMAGE
-from redock.logger import logger
+from redock.api import Container, Image, logger as api_logger
+from redock.base import logger as base_logger
+from redock.logger import logger as logger
+
+all_loggers = [logger, api_logger, base_logger]
 
 def main():
     """
@@ -26,24 +29,23 @@ def main():
     # Parse and validate the command line arguments.
     try:
         # Command line option defaults.
-        base = DEFAULT_BASE_IMAGE
         hostname = None
         message = None
         # Parse the command line options.
         options, arguments = getopt.getopt(sys.argv[1:], 'b:n:m:vh',
-                                          ['base=', 'hostname=', 'message=', 'verbose', 'help'])
+                                          ['hostname=', 'message=', 'verbose', 'help'])
         for option, value in options:
-            if option in ('-b', '--base'):
-                base = value
-            elif option in ('-n', '--hostname'):
+            if option in ('-n', '--hostname'):
                 hostname = value
             elif option in ('-m', '--message'):
                 message = value
             elif option in ('-v', '--verbose'):
                 if logger.getEffectiveLevel() == logging.INFO:
-                    logger.setLevel(logging.VERBOSE)
+                    for l in all_loggers:
+                        l.setLevel(logging.VERBOSE)
                 elif logger.getEffectiveLevel() == logging.VERBOSE:
-                    logger.setLevel(logging.DEBUG)
+                    for l in all_loggers:
+                        l.setLevel(logging.DEBUG)
             elif option in ('-h', '--help'):
                 usage()
                 return
@@ -68,7 +70,6 @@ def main():
     try:
         for image_name in arguments:
             container = Container(image=Image.coerce(image_name),
-                                  base=Image.coerce(base),
                                   hostname=hostname)
             if action == 'start':
                 container.start()
@@ -82,7 +83,6 @@ def main():
                     else:
                         logger.warn("SSH client exited with status %i after %s.",
                                     ssh_client.returncode, ssh_timer)
-                container.detach()
             elif action == 'commit':
                 container.commit(message=message)
             elif action == 'kill':
@@ -98,7 +98,7 @@ def usage():
     """
     Print a usage message to the console.
     """
-    usage = textwrap.dedent("""
+    print textwrap.dedent("""
         Usage: redock [OPTIONS] ACTION CONTAINER..
 
         Create and manage Docker containers and images. Supported actions are
@@ -106,12 +106,10 @@ def usage():
 
         Supported options:
 
-          -b, --base=IMAGE     override the base image (defaults to {base})
           -n, --hostname=NAME  set container host name (defaults to image tag)
           -m, --message=TEXT   message for image created with `commit' action
           -v, --verbose        make more noise (can be repeated)
           -h, --help           show this message and exit
     """).strip()
-    print usage.format(base=DEFAULT_BASE_IMAGE)
 
 # vim: ts=4 sw=4 et

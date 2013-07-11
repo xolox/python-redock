@@ -3,10 +3,16 @@ Documentation for the Redock API
 
 .. contents::
 
-Redock base API
+Main Redock API
 ---------------
 
 .. automodule:: redock.api
+   :members:
+
+Base image handling API
+-----------------------
+
+.. automodule:: redock.base
    :members:
 
 Bootstrap configuration management system

@@ -1,13 +1,13 @@
 redock: A human friendly wrapper around Docker
 ==============================================
 
-The ``redock`` program is a human friendly wrapper around Docker_, the `Linux
-container engine`_. Docker implements a lightweight form of virtualization_
-that makes it possible to start and stop virtual machines in less than a
-second. Before Docker the use of virtualization meant conventional virtual
-machines with all of the associated bloat. Docker makes it ridiculously cheap
-and fast to start/save/kill containers. This opens up exciting new
-possibilities for DevOps:
+Redock is a human friendly wrapper around Docker_, the `Linux container
+engine`_. Docker implements a lightweight form of virtualization_ that makes it
+possible to start and stop virtual machines in less than a second. Before
+Docker the use of virtualization meant conventional virtual machines with all
+of the associated bloat. Docker makes it ridiculously cheap and fast to
+start/save/kill containers. This opens up exciting new possibilities for
+DevOps:
 
 - Complex build environments can be split up into isolated containers where
   each container is concerned with the build requirements of a single project.
@@ -21,23 +21,23 @@ possibilities for DevOps:
 - To be honest, Docker is so fast that I could imagine myself building a test
   suite of a complete cluster on top of it.
 
-The last point is the reason why I started working on ``redock``. In my initial
+The last point is the reason why I started working on Redock. In my initial
 experiments with Docker_ I found a lot of sharp edges (both in the lack of
-documentation and in the implementation of Docker_ and the Python API) but at
+documentation and in the implementation of Docker_ and its Python API) but at
 the same time my fingers were itching to wrap Docker in an easy to use and
 human friendly wrapper to try and unleash its potential.
 
-What ``redock`` gives you is Docker without all the hassle: When you create a
-container, ``redock`` will install, configure and start an SSH_ server and open
+What Redock gives you is Docker without all the hassle: When you create a
+container, Redock will install, configure and start an SSH_ server and open
 an interactive SSH session to the container. What you do with the container
 after that is up to you...
 
 Usage
 -----
 
-You will need to have Docker_ installed before you can use ``redock``, please
-refer to Docker's `installation instructions`_. After you've installed Docker
-you can install ``redock`` using the following command::
+You will need to have Docker_ installed before you can use Redock, please refer
+to Docker's `installation instructions`_. After you've installed Docker you can
+install Redock using the following command::
 
     $ pip install redock
 
@@ -45,10 +45,10 @@ Once you've installed the program, here's how you create a container::
 
     $ redock start test
 
-If you run this command interactively and you start a single container,
-``redock`` will start an interactive SSH_ session that connects you to the
-container. In any case you will now be able to connect to the container over
-SSH_ using the name you gave to the container suffixed with ``-container``::
+If you run this command interactively and you start a single container, Redock
+will start an interactive SSH_ session that connects you to the container. In
+any case you will now be able to connect to the container over SSH_ using the
+name you gave to the container suffixed with ``-container``::
 
     $ ssh test-container
 
@@ -61,9 +61,9 @@ save your changes with the following command::
     $ redock commit test
 
 This command will persist the state of the container's file system in a Docker
-image. The next time you run ``redock`` with the same name it will create a
-container based on the disk image. To stop and delete a running container you
-use the following command::
+image. The next time you run Redock with the same name it will create a
+container based on the existing disk image. To kill and delete a running
+container you use the following command::
 
     $ redock kill test
 
@@ -73,9 +73,9 @@ since the last time that ``redock commit`` was used.
 Contact
 -------
 
-The latest version of ``redock`` is available on PyPI_ and GitHub_. For bug
-reports please create an issue on GitHub_. If you have questions, suggestions,
-etc. feel free to send me an e-mail at `peter@peterodding.com`_.
+The latest version of Redock is available on PyPI_ and GitHub_. For bug reports
+please create an issue on GitHub_. If you have questions, suggestions, etc.
+feel free to send me an e-mail at `peter@peterodding.com`_.
 
 License
 -------

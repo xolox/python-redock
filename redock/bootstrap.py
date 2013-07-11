@@ -1,15 +1,33 @@
-# Minimal configuration management system specialized to Debian/Ubuntu/Docker.
+# Minimal configuration management specialized to Ubuntu (Debian).
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 9, 2013
+# Last Change: July 12, 2013
 # URL: https://github.com/xolox/python-redock
+
+"""
+Bootstrap is a *minimal* `configuration management`_ system. Here are the goals
+(constraints) I had in mind when I started working on Bootstrap:
+
+**Specialized towards Debian**
+  Bootstrap is specialized towards Debian Linux (and its derivatives) because I
+  have several years of hands on experience with Debian and Ubuntu Linux and
+  because Docker currently gravitates to Ubuntu Linux (although this will
+  probably change over time).
+
+**Based on SSH connections**
+  SSH_ is used to connect to remote hosts because it's the lowest common
+  denominator that works with Docker, VirtualBox, XenServer and physical
+  servers while being secure and easy to use.
+
+.. _configuration management: http://en.wikipedia.org/wiki/Configuration_management#Operating_System_configuration_management
+.. _SSH: http://en.wikipedia.org/wiki/Secure_Shell
+"""
 
 # Standard library modules.
 import os
 import os.path
 import pipes
 import subprocess
-import urllib
 
 # External dependencies.
 from execnet import makegateway
@@ -23,23 +41,11 @@ MIRROR_FILE = os.path.expanduser('~/.redock/ubuntu-mirror.txt')
 
 class Bootstrap(object):
 
-    """
-    :py:class:`Bootstrap` is a minimal configuration management system. The
-    following points give a short summary of the goals I had in mind when I
-    started writing it:
-
-    - It's specialized towards Debian Linux (and its derivatives) because I
-      have several years of hands on experience with Debian and Ubuntu Linux
-      and because Docker currently gravitates to Ubuntu Linux (although this
-      will probably change over time).
-
-    - SSH is used to connect to remote hosts because it's the lowest common
-      denominator that works with Docker, VirtualBox, XenServer and physical
-      servers while being secure and easy to use.
-
-    Right now :py:class:`Bootstrap` is specialized to Ubuntu 12.04 systems
-    (Docker containers) but there's no reason why it has to be like this.
-    """
+    #"""
+    #The Bootstrap configuration management system is implemented as the class
+    #:py:class:`Bootstrap`. The constructor takes one argument: the SSH alias of
+    #a remote host as defined in your `~/.ssh/config`.
+    #"""
 
     def __init__(self, ssh_alias):
         """
@@ -81,54 +87,11 @@ class Bootstrap(object):
 
         :param packages: The names of one or more packages to install (strings).
         """
-        self.execute('apt-get', 'install', '-q', '-y', '--no-install-recommends', *packages)
-
-    def enable_package_repositories(self, *repositories):
-        """
-        Configure the remote package management system (``apt-get``) by
-        overwriting ``/etc/apt/sources.list``. Picks a nearby Ubuntu package
-        mirror and enables the given repositories (by default only the ``main``
-        repository is enabled). After enabling the repositories, the package
-        lists are updated by running ``apt-get update``.
-
-        :param repositories: The names of the package repositories to enable.
-        """
-        # By default only the main area is enabled.
-        if not repositories:
-            repositories = ('main',)
-        self.logger.info("Enabling package repositories: %s", ' '.join(repositories))
-        # Generate the contents of `/etc/apt/sources.list'.
-        template = 'deb {mirror} {channel} {repositories}\n'
-        repositories = ' '.join(repositories)
-        lines = []
-        for channel in ['precise', 'precise-updates', 'precise-backports', 'precise-security']:
-            lines.append(template.format(mirror=self.select_ubuntu_mirror(),
-                                         channel=channel,
-                                         repositories=repositories))
-        self.upload_file('/etc/apt/sources.list', ''.join(lines))
-        self.execute('apt-get', 'update')
-
-    def select_ubuntu_mirror(self):
-        """
-        Find an Ubuntu mirror that is geographically close to the current
-        location for use inside Docker containers. We remember the choice in a
-        file on the host system so that we always configure the same mirror in
-        Docker containers (if you change the mirror, ``apt-get`` has to
-        download all package metadata again, wasting a lot of time).
-        """
-        if not os.path.isfile(MIRROR_FILE):
-            url = 'http://mirrors.ubuntu.com/mirrors.txt'
-            self.logger.debug("Finding nearby Ubuntu package mirror using %s ..", url)
-            mirror = urllib.urlopen(url).readline().strip()
-            with open(MIRROR_FILE, 'w') as handle:
-                handle.write('%s\n' % mirror)
-            self.logger.debug("Selected mirror: %s", mirror)
-        with open(MIRROR_FILE) as handle:
-            return handle.read().strip()
+        self.execute('apt-get', 'install', '-q', '-y', *packages)
 
     def update_system_packages(self):
         """
-        Perform a full upgrade of all packages inside the container.
+        Perform a full upgrade of all system packages inside the container.
         """
         self.execute('apt-get', 'dist-upgrade', '-q', '-y', '--no-install-recommends')
 
@@ -185,7 +148,7 @@ class Bootstrap(object):
 
 class RemoteCommandFailed(Exception):
     """
-    Custom exception raised by :py:func:`Bootstrap.execute()` when a remote
+    Raised by :py:func:`Bootstrap.execute()` when a remote
     command fails (exits with a nonzero exit status).
     """
 
