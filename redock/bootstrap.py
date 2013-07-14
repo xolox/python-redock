@@ -1,7 +1,7 @@
 # Minimal configuration management specialized to Ubuntu (Debian).
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 12, 2013
+# Last Change: July 14, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -19,7 +19,14 @@ Bootstrap is a *minimal* `configuration management`_ system. Here are the goals
   denominator that works with Docker, VirtualBox, XenServer and physical
   servers while being secure and easy to use.
 
+**Remote code execution using Python**
+  The execnet_ package is used to execute Python code on remote systems. When
+  Bootstrap connects to a remote system it automatically installs the system
+  package ``python2.7`` on the remote system because this is required to run
+  execnet_.
+
 .. _configuration management: http://en.wikipedia.org/wiki/Configuration_management#Operating_System_configuration_management
+.. _execnet: http://codespeak.net/execnet/
 .. _SSH: http://en.wikipedia.org/wiki/Secure_Shell
 """
 
@@ -41,18 +48,16 @@ MIRROR_FILE = os.path.expanduser('~/.redock/ubuntu-mirror.txt')
 
 class Bootstrap(object):
 
-    #"""
-    #The Bootstrap configuration management system is implemented as the class
-    #:py:class:`Bootstrap`. The constructor takes one argument: the SSH alias of
-    #a remote host as defined in your `~/.ssh/config`.
-    #"""
+    """
+    The Bootstrap configuration management system is implemented as the class
+    :py:class:`Bootstrap`.
+    """
 
     def __init__(self, ssh_alias):
         """
-        Initialize the configuration management system by creating an
-        ``execnet`` gateway over an SSH connection. First we make sure the
-        ``python2.7`` package is installed; without it ``execnet`` won't
-        work.
+        Initialize the configuration management system by creating an execnet_
+        gateway over an SSH connection. First we make sure the ``python2.7``
+        package is installed; without it execnet_ won't work.
 
         :param ssh_alias: Alias of remote host in SSH client configuration.
         """
@@ -65,25 +70,33 @@ class Bootstrap(object):
 
     def upload_file(self, pathname, contents):
         """
-        Create a file on the container's file system.
+        Create a file on the remote file system.
 
-        :param pathname: The absolute pathname in the container.
+        :param pathname: The absolute pathname on the remote system.
         :param contents: The contents of the file (a string).
         """
-        # Pure function that's executed remotely.
         def remote_function(channel, pathname, contents):
+            """
+            Pure function that's executed remotely to create/update the file.
+            """
             import os.path
             directory = os.path.dirname(pathname)
             if not os.path.isdir(directory):
                 os.makedirs(directory)
             handle = open(pathname, 'w')
             handle.write(contents)
+            bytes_written = handle.tell()
             handle.close()
-        self.gateway.remote_exec(remote_function, pathname=pathname, contents=contents)
+            channel.send(bytes_written)
+        channel = self.gateway.remote_exec(remote_function, pathname=pathname, contents=contents)
+        bytes_written = channel.receive()
+        if len(contents) != bytes_written:
+            msg = "Remote side reported %i bytes written, but local side expected %i bytes!"
+            raise Exception, msg % (bytes_written, len(contents))
 
     def install_packages(self, *packages):
         """
-        Install the given system packages inside the container.
+        Install the given system packages on the remote system.
 
         :param packages: The names of one or more packages to install (strings).
         """
@@ -91,51 +104,68 @@ class Bootstrap(object):
 
     def update_system_packages(self):
         """
-        Perform a full upgrade of all system packages inside the container.
+        Perform a full upgrade of all system packages on the remote system.
         """
         self.execute('apt-get', 'dist-upgrade', '-q', '-y', '--no-install-recommends')
 
     def execute(self, *command, **kw):
         """
         Execute a remote command over SSH so that the output of the remote
-        command is immediately visible on the local terminal.
+        command is immediately visible on the local terminal. If no standard
+        input is given, this allocates a pseudo-tty (using ``ssh -t``) which
+        means the operator can interact with the remote system should it prompt
+        for input.
 
-        :param command: The command and its arguments.
-        :param input: The standard input for the command (a string).
+        Raises :py:exc:`ExternalCommandFailed` if the remote command ends with a
+        nonzero exit code.
+
+        :param command: A list with the remote command and its arguments.
+        :param input: The standard input for the command (a string, optional).
         """
-        command = ['ssh', '-t', self.ssh_alias] + list(command)
-        self.logger.info("%s: Executing command %s", self.ssh_alias, ' '.join(command))
+        has_input = kw.get('input') is not None
+        ssh_command = ['ssh']
+        if not has_input:
+            ssh_command.append('-t')
+        ssh_command.append(self.ssh_alias)
+        ssh_command.extend(command)
+        self.logger.info("%s: Executing command %s", self.ssh_alias, ' '.join(ssh_command))
         options = dict()
-        if kw.get('input') is not None:
+        if has_input:
             options['stdin'] = subprocess.PIPE
-        process = subprocess.Popen(command, **options)
+        process = subprocess.Popen(ssh_command, **options)
         process.communicate(kw.get('input'))
         self.logger.debug("%s: Command exited with status %i.", self.ssh_alias, process.returncode)
         if process.returncode != 0:
-            msg = "Remote command failed with exit status %i! (command: %s)"
-            raise RemoteCommandFailed, msg % (process.returncode, ' '.join(command))
+            msg = "Remote command on %s failed with exit status %i! (command: %s)"
+            raise ExternalCommandFailed, msg % (self.ssh_alias, process.returncode, ' '.join(command))
 
-    def rsync(self, host_directory, container_directory, cvs_exclude=True):
+    def rsync(self, local_directory, remote_directory, cvs_exclude=True, delete=True):
         """
         Copy a directory on the host to the container using rsync over SSH.
 
-        :param host_directory: The pathname of the source directory on the host.
-        :param container_directory: The pathname of the target directory in the container.
+        Raises :py:exc:`ExternalCommandFailed` if the remote command ends with a
+        nonzero exit code.
+
+        :param local_directory: The pathname of the source directory on the host.
+        :param remote_directory: The pathname of the target directory in the container.
         :param cvs_exclude: Exclude version control files (enabled by default).
+        :param delete: Delete remote files that don't exist locally (enabled by default).
         """
         rsync_timer = Timer()
         self.install_packages('rsync')
         def normalize(directory):
             """ Make sure a directory path ends with a trailing slash. """
             return "%s/" % directory.rstrip('/')
-        location = "%s:%s" % (self.ssh_alias, normalize(container_directory))
-        self.logger.debug("Uploading %s to %s ..", host_directory, location)
-        command = ['rsync', '-a', '--delete']
-        command.extend(['--rsync-path', 'mkdir -p %s && rsync' % pipes.quote(container_directory)])
+        location = "%s:%s" % (self.ssh_alias, normalize(remote_directory))
+        self.logger.debug("Uploading %s to %s ..", local_directory, location)
+        command = ['rsync', '-a']
+        command.extend(['--rsync-path', 'mkdir -p %s && rsync' % pipes.quote(remote_directory)])
         if cvs_exclude:
             command.append('--cvs-exclude')
             command.extend(['--exclude', '.hgignore'])
-        command.append(normalize(host_directory))
+        if delete:
+            command.append('--delete')
+        command.append(normalize(local_directory))
         command.append(location)
         self.logger.debug("Generated rsync command: %s", quote_command_line(command))
         exit_code = os.spawnvp(os.P_WAIT, command[0], command)
@@ -144,12 +174,12 @@ class Bootstrap(object):
         self.logger.debug("rsync exited with status %d.", exit_code)
         if exit_code != 0:
             msg = "Failed to upload directory %s to %s, rsync exited with nonzero status %d! (command: %s)"
-            raise RemoteCommandFailed, msg % (host_directory, location, exit_code, quote_command_line(command))
+            raise ExternalCommandFailed, msg % (local_directory, location, exit_code, quote_command_line(command))
 
-class RemoteCommandFailed(Exception):
+class ExternalCommandFailed(Exception):
     """
-    Raised by :py:func:`Bootstrap.execute()` when a remote
-    command fails (exits with a nonzero exit status).
+    Raised by :py:func:`Bootstrap.execute()` and :py:func:`Bootstrap.rsync()`
+    when an external command fails (ends with a nonzero exit status).
     """
 
 # vim: ts=4 sw=4 et

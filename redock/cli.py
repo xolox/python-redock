@@ -1,7 +1,7 @@
 # Command line interface for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 11, 2013
+# Last Change: July 14, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -19,8 +19,9 @@ from humanfriendly import Timer
 from redock.api import Container, Image, logger as api_logger
 from redock.base import logger as base_logger
 from redock.logger import logger as logger
+from redock.utils import logger as utils_logger
 
-all_loggers = [logger, api_logger, base_logger]
+all_loggers = [logger, api_logger, base_logger, utils_logger]
 
 def main():
     """

@@ -1,7 +1,7 @@
 # Initialization of the base image used by Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 12, 2013
+# Last Change: July 13, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -24,8 +24,6 @@ from redock.utils import (RemoteTerminal, get_ssh_public_key,
 
 # The logger for this module.
 logger = get_logger(__name__)
-import logging
-logger.setLevel(logging.DEBUG)
 
 # The repository and tag of Redock's base image.
 BASE_IMAGE_REPO = 'redock'

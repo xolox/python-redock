@@ -1,10 +1,10 @@
 Documentation for redock
 ========================
 
-Redock is a human friendly wrapper around Docker_, the `Linux container
-engine`_. Docker implements a lightweight form of virtualization_ that makes it
-possible to start and stop virtual machines in less than a second. Redock comes
-in two parts:
+Welcome to the documentation for Redock |release|. Redock is a human friendly
+wrapper around Docker_, the `Linux container engine`_. Docker implements a
+lightweight form of virtualization_ that makes it possible to start and stop
+virtual machines in less than a second. Redock comes in two parts:
 
 1. The command line program ``redock`` whose main goal to to be simple to use.
 

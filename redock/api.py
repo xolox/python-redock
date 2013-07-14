@@ -1,7 +1,7 @@
 # Main API for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 12, 2013
+# Last Change: July 14, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -30,7 +30,7 @@ import update_dotdee
 # Initialize the logger.
 from redock.logger import get_logger
 from redock.base import BASE_IMAGE_NAME, find_base_image
-from redock.utils import (PRIVATE_SSH_KEY, RemoteTerminal,
+from redock.utils import (PRIVATE_SSH_KEY, Config, RemoteTerminal,
                           find_local_ip_addresses, quote_command_line,
                           slug, summarize_id)
 
@@ -39,10 +39,11 @@ logger = get_logger(__name__)
 class Container(object):
 
     """
-    The :py:class:`Container` class is the main entry point to the Redock API.
-    It aims to provide a simple to use representation of Docker containers.
-    You'll probably never need most of the methods defined in this class; if
-    you're getting started with Redock you should focus on these methods:
+    :py:class:`Container` is the main entry point to the Redock API. It aims to
+    provide a simple to use representation of Docker containers (and in
+    extension Docker images). You'll probably never need most of the methods
+    defined in this class; if you're getting started with Redock you should
+    focus on these methods:
 
     - :py:func:`Container.start()`
     - :py:func:`Container.commit()`
@@ -58,14 +59,15 @@ class Container(object):
 
     def __init__(self, image, hostname=None, timeout=10):
         """
-        Initialize a :py:class:`Container` instance from the given arguments.
+        Initialize a :py:class:`Container` from the given arguments.
 
         :param image: The repository and tag of the container's image (in the
                       format expected by :py:class:`Image.coerce()`).
         :param hostname: The host name to use inside the container. If none is
                          given, the image's tag is used.
-        :param timeout: The timeout while waiting for a container to become
-                        reachable over SSH_ (a couple of seconds should be plenty).
+        :param timeout: The timeout in seconds while waiting for a container to
+                        become reachable over SSH_ (a couple of seconds should
+                        be plenty).
         """
         # Validate and store the arguments.
         self.image = Image.coerce(image)
@@ -74,6 +76,7 @@ class Container(object):
         self.timeout = timeout
         # Initialize some private variables.
         self.logger = logger
+        self.config = Config()
         self.session = Session()
         self.update_dotdee = update_dotdee.UpdateDotDee(os.path.expanduser('~/.ssh/config'))
         # Connect to the Docker API over HTTP.
@@ -89,7 +92,7 @@ class Container(object):
     def start(self):
         """
         Create and start the Docker container. On the first run of Redock this
-        generates a base image using :py:func:`redock.base.create_base_image()`.
+        creates a base image using :py:func:`redock.base.create_base_image()`.
         """
         if not self.find_container():
             if not self.find_image(self.image):
@@ -98,23 +101,25 @@ class Container(object):
             self.start_supervisor()
         self.setup_ssh_access()
 
-    def commit(self, message=None, author=None):
+    def commit(self, message=None, author=None, restart=True):
         """
-        Commit any changes to the running container. Corresponds to the
-        ``docker commit`` command.
+        Commit any changes to the running container to the associated image.
+        Corresponds to the ``docker commit`` command.
 
-        Raises :py:class:`NoContainerRunning` if an associated Docker container
+        Raises :py:exc:`NoContainerRunning` if an associated Docker container
         is not already running.
 
         :param message: A short message describing the commit (a string).
         :param author: The name of the author (a string).
         """
         self.check_active()
-        self.logger.verbose("Committing changes: %s", message or 'no description given')
+        self.logger.info("Committing changes: %s", message or 'no description given')
         self.client.commit(self.session.container_id, repository=self.image.repository,
                            tag=self.image.tag, message=message, author=author)
+        # TODO This is a hack?
         self.kill()
-        self.start()
+        if restart:
+            self.start()
 
     def kill(self):
         """
@@ -128,6 +133,8 @@ class Container(object):
             self.client.kill(self.session.container_id)
             self.logger.info("Removing container ..")
             self.client.remove_container(self.session.container_id)
+            with self.config as state:
+                del state['containers'][self.image.key]
             self.session.reset()
         self.revoke_ssh_access()
 
@@ -140,12 +147,13 @@ class Container(object):
                   otherwise.
         """
         if not self.session.container_id:
-            self.logger.info("Looking for running container ..")
-            for container in self.client.containers():
-                if container.get('Image') == self.image.name:
-                    self.session.container_id = container['Id']
-                    self.logger.info("Found running container: %s",
-                                     summarize_id(self.session.container_id))
+            self.logger.verbose("Looking for running container ..")
+            state = self.config.load()
+            container_id = state['containers'].get(self.image.key)
+            # Make sure the container is still running.
+            if container_id in [c['Id'] for c in self.client.containers()]:
+                self.session.container_id = container_id
+                self.logger.info("Found running container: %s", summarize_id(container_id))
         return bool(self.session.container_id)
 
     def find_image(self, image_to_find):
@@ -173,7 +181,7 @@ class Container(object):
         Starts the container and runs Supervisor inside the container.
         """
         command = '/usr/bin/supervisord -n'
-        self.logger.info("Starting process supervisor ..")
+        self.logger.info("Starting process supervisor (and SSH server) ..")
         # Select the Docker image to use as a base for the container.
         image = self.find_image(self.image) or self.find_image(self.base)
         self.logger.verbose("Creating container from image: %r", image)
@@ -182,15 +190,30 @@ class Container(object):
                                               command=command,
                                               hostname=self.hostname,
                                               ports=['22'])
-        # Remember and report the container id.
-        self.session.container_id = result['Id']
+        # Client.create_container() reports a short id (12 characters) while
+        # Client.containers() reports long ids (65 characters). I'd rather use
+        # the full ids where possible so we will translate the short id to a
+        # long id.
+        for container in self.client.containers(all=True):
+            self.logger.debug("Checking container: %r", container)
+            if container['Id'].startswith(result['Id']):
+                self.session.container_id = container['Id']
+                break
+        else:
+            msg = "Failed to translate short id (%s) to long id!"
+            raise Exception, msg % result['Id']
         self.logger.verbose("Created container: %s", summarize_id(self.session.container_id))
+        for text in result.get('Warnings', []):
+            logger.warn("Warning: %s", text)
         # Start the command inside the container.
         self.logger.verbose("Running command: %s", command)
         self.client.start(self.session.container_id)
         # Make the output from the container visible to the user.
         self.session.remote_terminal = RemoteTerminal(self.session.container_id)
         self.session.remote_terminal.attach()
+        # Persist association between (repository, tag) and container id.
+        with self.config as state:
+            state['containers'][self.image.key] = self.session.container_id
 
     def get_ssh_client_command(self, ip_address=None, port_number=None):
         """
@@ -368,8 +391,8 @@ class Image(object):
         """
         Coerce strings to :py:class:`Image` objects.
 
-        Raises :py:class:`ValueError` when a string with an incorrect format is
-        given.
+        Raises :py:exc:`exceptions.ValueError` when a string with an
+        incorrect format is given.
 
         :param value: The name of the image, expected to be a string of the
                       form ``repository:tag``. If an :py:class:`Image` object
@@ -388,6 +411,13 @@ class Image(object):
                 value = Image(repository=components[0],
                               tag=components[1])
         return value
+
+    @property
+    def key(self):
+        """
+        Get a tuple with the image's repository and tag.
+        """
+        return (self.repository, self.tag)
 
     @property
     def name(self):
