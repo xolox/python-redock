@@ -16,12 +16,10 @@ import textwrap
 from humanfriendly import Timer
 
 # Modules included in our package.
-from redock.api import Container, Image, logger as api_logger
-from redock.base import logger as base_logger
-from redock.logger import logger as logger
-from redock.utils import logger as utils_logger
+from redock.api import Container, Image
+from redock.logger import get_logger, root_logger
 
-all_loggers = [logger, api_logger, base_logger, utils_logger]
+logger = get_logger(__name__)
 
 def main():
     """
@@ -41,12 +39,10 @@ def main():
             elif option in ('-m', '--message'):
                 message = value
             elif option in ('-v', '--verbose'):
-                if logger.getEffectiveLevel() == logging.INFO:
-                    for l in all_loggers:
-                        l.setLevel(logging.VERBOSE)
-                elif logger.getEffectiveLevel() == logging.VERBOSE:
-                    for l in all_loggers:
-                        l.setLevel(logging.DEBUG)
+                if root_logger.getEffectiveLevel() == logging.INFO:
+                    root_logger.setLevel(logging.VERBOSE)
+                elif root_logger.getEffectiveLevel() == logging.VERBOSE:
+                    root_logger.setLevel(logging.DEBUG)
             elif option in ('-h', '--help'):
                 usage()
                 return

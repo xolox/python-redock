@@ -1,7 +1,7 @@
 # Initialization of the base image used by Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 13, 2013
+# Last Change: July 15, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -162,7 +162,7 @@ def create_base_image(client):
                                      ports=['22'])
     container_id = result['Id']
     for text in result.get('Warnings', []):
-      logger.warn("Warning: %s", text)
+      logger.warn("%s", text)
     logger.verbose("Created container %s.", summarize_id(container_id))
     client.start(container_id)
     with RemoteTerminal(container_id):

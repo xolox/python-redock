@@ -52,6 +52,16 @@ class Config(object):
     Redock needs to persist to disk (to share state in between runs of Redock).
     UNIX file locking is used to guarantee that the datafile is not written to
     simultaneously by multiple processes (that could corrupt the state).
+
+    To use this class to update the configuration, use it like a context
+    manager, like this:
+
+    >>> config = Config()
+    >>> with config as state:
+    ...   state['containers'].clear()
+
+    When used like this, ``state`` is a dictionary which is saved to disk when
+    the ``with`` block ends without raising an exception.
     """
 
     def __init__(self):
@@ -115,6 +125,11 @@ class RemoteTerminal(object):
     """
 
     def __init__(self, container_id):
+        """
+        Initialize the context manager for the ``docker attach`` process.
+
+        :param container_id: The id of the container to attach to (a string).
+        """
         self.container_id = container_id
 
     def attach(self):
@@ -235,10 +250,10 @@ def quote_command_line(command):
 def summarize_id(id):
     """
     Docker uses hexadecimal strings of 65 characters to uniquely identify
-    containers, images and other objects. Docker's API always reports
-    full IDs of 65 characters, but the ``docker`` program abbreviates
-    these IDs to 12 characters in the user interface. We do the same
-    because it makes the output more user friendly.
+    containers, images and other objects. Docker's API almost always reports
+    full IDs of 65 characters, but the ``docker`` program abbreviates these IDs
+    to 12 characters in the user interface. We do the same because it makes the
+    output more user friendly.
 
     :param id: A hexadecimal ID of 65 characters.
     :returns: A summarized ID of 12 characters.

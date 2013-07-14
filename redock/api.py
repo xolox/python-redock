@@ -1,7 +1,7 @@
 # Main API for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 14, 2013
+# Last Change: July 15, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -204,7 +204,7 @@ class Container(object):
             raise Exception, msg % result['Id']
         self.logger.verbose("Created container: %s", summarize_id(self.session.container_id))
         for text in result.get('Warnings', []):
-            logger.warn("Warning: %s", text)
+            logger.warn("%s", text)
         # Start the command inside the container.
         self.logger.verbose("Running command: %s", command)
         self.client.start(self.session.container_id)
