@@ -1,12 +1,14 @@
 # Minimal configuration management specialized to Ubuntu (Debian).
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 14, 2013
+# Last Change: July 15, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
-Bootstrap is a *minimal* `configuration management`_ system. Here are the goals
-(constraints) I had in mind when I started working on Bootstrap:
+Bootstrap is a minimal `configuration management`_ system. Right now it's just
+a toy module that I may or may not use to extend Redock beyond the existing
+``redock start``, ``redock commit`` and ``redock kill`` functionality and
+commands. Here is the design rationale behind Bootstrap (in its current form):
 
 **Specialized towards Debian**
   Bootstrap is specialized towards Debian Linux (and its derivatives) because I
@@ -16,18 +18,24 @@ Bootstrap is a *minimal* `configuration management`_ system. Here are the goals
 
 **Based on SSH connections**
   SSH_ is used to connect to remote hosts because it's the lowest common
-  denominator that works with Docker, VirtualBox, XenServer and physical
+  denominator that works with Docker_, VirtualBox_, XenServer_ and physical
   servers while being secure and easy to use.
 
 **Remote code execution using Python**
-  The execnet_ package is used to execute Python code on remote systems. When
-  Bootstrap connects to a remote system it automatically installs the system
-  package ``python2.7`` on the remote system because this is required to run
-  execnet_.
+  The execnet_ package is used to execute Python code on remote systems because
+  I prefer the structure of Python code over shell scripts (Python avoids
+  `quoting hell`_). When Bootstrap connects to a remote system it automatically
+  installs the system package ``python2.7`` on the remote system because this
+  is required to run execnet_ (on the other hand, execnet_ itself does not have
+  to be installed on the remote system).
 
 .. _configuration management: http://en.wikipedia.org/wiki/Configuration_management#Operating_System_configuration_management
+.. _Docker: http://www.docker.io/
 .. _execnet: http://codespeak.net/execnet/
+.. _quoting hell: http://wiki.tcl.tk/1726
 .. _SSH: http://en.wikipedia.org/wiki/Secure_Shell
+.. _VirtualBox: https://www.virtualbox.org/
+.. _XenServer: http://www.xenserver.org/
 """
 
 # Standard library modules.
@@ -111,16 +119,20 @@ class Bootstrap(object):
     def execute(self, *command, **kw):
         """
         Execute a remote command over SSH so that the output of the remote
-        command is immediately visible on the local terminal. If no standard
-        input is given, this allocates a pseudo-tty (using ``ssh -t``) which
-        means the operator can interact with the remote system should it prompt
-        for input.
+        command (the standard output and standard error streams) is immediately
+        visible on the local terminal. If no standard input is given, this
+        allocates a pseudo-tty_ (using ``ssh -t``) which means the operator can
+        interact with the remote system should it prompt for input.
 
         Raises :py:exc:`ExternalCommandFailed` if the remote command ends with a
         nonzero exit code.
 
         :param command: A list with the remote command and its arguments.
-        :param input: The standard input for the command (a string, optional).
+        :param input: The standard input for the command (expected to be a
+                      string). This is an optional keyword argument. If this
+                      argument is given, no pseudo-tty_ will be allocated.
+
+        .. _pseudo-tty: http://en.wikipedia.org/wiki/Pseudo_terminal
         """
         has_input = kw.get('input') is not None
         ssh_command = ['ssh']
