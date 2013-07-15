@@ -1,7 +1,7 @@
 # Command line interface for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 14, 2013
+# Last Change: July 16, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -53,7 +53,7 @@ def main():
         if len(arguments) < 2:
             usage()
             return
-        supported_actions = ('start', 'commit', 'kill')
+        supported_actions = ('start', 'commit', 'kill', 'delete')
         action = arguments.pop(0)
         if action not in supported_actions:
             msg = "Action not supported: %r (supported actions are: %s)"
@@ -84,6 +84,8 @@ def main():
                 container.commit(message=message)
             elif action == 'kill':
                 container.kill()
+            elif action == 'delete':
+                container.delete()
             else:
                 # Programming error...
                 assert False, "Unhandled action!"
@@ -99,7 +101,7 @@ def usage():
         Usage: redock [OPTIONS] ACTION CONTAINER..
 
         Create and manage Docker containers and images. Supported actions are
-        `start', `commit' and `kill'.
+        `start', `commit', `kill' and `delete'.
 
         Supported options:
 

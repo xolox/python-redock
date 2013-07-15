@@ -1,7 +1,7 @@
 # Main API for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 15, 2013
+# Last Change: July 16, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -121,7 +121,7 @@ class Container(object):
 
     def kill(self):
         """
-        Kill and delete the container. All changes  since the last time that
+        Kill and remove the container. All changes since the last time that
         :py:func:`Container.commit()` was called will be lost.
         """
         if self.find_container():
@@ -135,6 +135,14 @@ class Container(object):
                 del state['containers'][self.image.key]
             self.session.reset()
         self.revoke_ssh_access()
+
+    def delete(self):
+        """
+        Delete the image associated with the container (if any). The data in
+        the image will be lost.
+        """
+        self.logger.info("Deleting image %s ..", self.image.name)
+        self.client.remove_image(self.image.name)
 
     def find_container(self):
         """

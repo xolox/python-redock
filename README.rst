@@ -93,7 +93,10 @@ container you use the following command::
     $ redock kill test
 
 This will discard all changes made to the file system inside the container
-since the last time that ``redock commit`` was used.
+since the last time that ``redock commit`` was used. The Docker image
+associated with a container can be deleted like this::
+
+    $ redock delete test
 
 Naming conventions
 ~~~~~~~~~~~~~~~~~~
