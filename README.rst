@@ -122,9 +122,10 @@ on the environment variable ``$USER``).
 Contact
 -------
 
-The latest version of Redock is available on PyPI_ and GitHub_. For bug reports
-please create an issue on GitHub_. If you have questions, suggestions, etc.
-feel free to send me an e-mail at `peter@peterodding.com`_.
+The latest version of Redock is available on PyPI_ and GitHub_. The API
+documentation is `hosted on Read The Docs`_. For bug reports please create an
+issue on GitHub_. If you have questions, suggestions, etc. feel free to send me
+an e-mail at `peter@peterodding.com`_.
 
 License
 -------
@@ -137,6 +138,7 @@ This software is licensed under the `MIT license`_.
 .. _dependencies: https://github.com/xolox/python-redock/blob/master/requirements.txt
 .. _Docker: http://www.docker.io/
 .. _GitHub: https://github.com/xolox/python-redock
+.. _hosted on Read The Docs: https://redock.readthedocs.org/en/latest/
 .. _installation instructions: http://www.docker.io/gettingstarted/
 .. _Linux container engine: http://en.wikipedia.org/wiki/LXC
 .. _MIT license: http://en.wikipedia.org/wiki/MIT_License

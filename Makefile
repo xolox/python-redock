@@ -1,7 +1,7 @@
-# Makefile for the redock program.
+# Makefile for Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 7, 2013
+# Last Change: July 15, 2013
 # URL: https://github.com/xolox/python-redock
 
 default:
