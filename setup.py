@@ -3,7 +3,7 @@
 # Setup script for redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 8, 2013
+# Last Change: July 16, 2013
 # URL: https://github.com/xolox/python-redock
 
 import re
@@ -39,4 +39,5 @@ setup(name='redock',
       author_email='peter@peterodding.com',
       packages=find_packages(),
       entry_points=dict(console_scripts=['redock = redock.cli:main']),
-      install_requires=requirements)
+      install_requires=requirements,
+      test_suite='redock.tests')
