@@ -101,7 +101,7 @@ class Container(object):
             self.start_supervisor()
         self.setup_ssh_access()
 
-    def commit(self, message=None, author=None, restart=True):
+    def commit(self, message=None, author=None):
         """
         Commit any changes to the running container to the associated image.
         Corresponds to the ``docker commit`` command.
@@ -114,12 +114,10 @@ class Container(object):
         """
         self.check_active()
         self.logger.info("Committing changes: %s", message or 'no description given')
-        self.client.commit(self.session.container_id, repository=self.image.repository,
-                           tag=self.image.tag, message=message, author=author)
-        # TODO This is a hack?
-        self.kill()
-        if restart:
-            self.start()
+        result = self.client.commit(self.session.container_id, repository=self.image.repository,
+                                    tag=self.image.tag, message=message, author=author)
+        image_ids = [i['Id'] for i in self.client.images()]
+        self.image.id = self.expand_id(result['Id'], image_ids)
 
     def kill(self):
         """
@@ -190,18 +188,8 @@ class Container(object):
                                               command=command,
                                               hostname=self.hostname,
                                               ports=['22'])
-        # Client.create_container() reports a short id (12 characters) while
-        # Client.containers() reports long ids (65 characters). I'd rather use
-        # the full ids where possible so we will translate the short id to a
-        # long id.
-        for container in self.client.containers(all=True):
-            self.logger.debug("Checking container: %r", container)
-            if container['Id'].startswith(result['Id']):
-                self.session.container_id = container['Id']
-                break
-        else:
-            msg = "Failed to translate short id (%s) to long id!"
-            raise Exception, msg % result['Id']
+        container_ids = [c['Id'] for c in self.client.containers(all=True)]
+        self.session.container_id = self.expand_id(result['Id'], container_ids)
         self.logger.verbose("Created container: %s", summarize_id(self.session.container_id))
         for text in result.get('Warnings', []):
             logger.warn("%s", text)
@@ -367,6 +355,32 @@ class Container(object):
         """
         if not self.find_container():
             raise NoContainerRunning, "No active container!"
+
+    def expand_id(self, short_id, candidate_ids):
+        """
+        :py:func:`docker.Client.create_container()` and
+        :py:func:`docker.Client.commit()` report short ids (12 characters)
+        while :py:func:`docker.Client.containers()` and
+        :py:func:`docker.Client.images()` report long ids (65 characters). I'd
+        rather use the full ids where possible. This method translates short
+        ids into long ids at the expense of an additional API call (who
+        cares).
+
+        Raises :py:exc:`exceptions.Exception` if no long id corresponding to
+        the short id can be matched (this might well be a purely theoretical
+        problem, it certainly shouldn't happen during regular use).
+
+        :param short_id: A short id of 12 characters.
+        :param candidate_ids: A list of available long ids.
+        :returns: The long id corresponding to the given short id.
+        """
+        self.logger.debug("Translation short id %s into long id ..", short_id)
+        for long_id in candidate_ids:
+            self.logger.debug("Checking candidate: %s", long_id)
+            if long_id.startswith(short_id):
+                return long_id
+        msg = "Failed to translate short id (%s) into long id!"
+        raise Exception, msg % short_id
 
 class Image(object):
 
