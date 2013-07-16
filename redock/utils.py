@@ -1,7 +1,7 @@
 # Utility functions for Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 14, 2013
+# Last Change: July 16, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -160,6 +160,7 @@ def select_ubuntu_mirror(force=False):
     Docker containers (if you change the mirror, ``apt-get`` has to
     download all package metadata again, wasting a lot of time).
     """
+    create_configuration_directory()
     if not os.path.isfile(UBUNTU_MIRROR_FILE):
         url = 'http://mirrors.ubuntu.com/mirrors.txt'
         logger.debug("Finding nearby Ubuntu package mirror using %s ..", url)
@@ -189,12 +190,11 @@ def generate_ssh_key_pair():
     Generate an SSH key pair for communication between the host system and
     containers created with Redock. Requires the ``ssh-keygen`` program.
     """
+    create_configuration_directory()
     logger.verbose("Checking if we need to generate a new SSH key pair ..")
     if os.path.isfile(PRIVATE_SSH_KEY):
         logger.verbose("SSH key pair was previously generated: %s", format_path(PRIVATE_SSH_KEY))
         return
-    if not os.path.isdir(REDOCK_CONFIG_DIR):
-        os.makedirs(REDOCK_CONFIG_DIR)
     logger.info("No existing SSH key pair found, generating new key: %s", format_path(PRIVATE_SSH_KEY))
     command = ['ssh-keygen', '-t', 'rsa', '-f', PRIVATE_SSH_KEY, '-N', '', '-C', 'root@%s' % socket.gethostname()]
     ssh_keygen = subprocess.Popen(command)
@@ -270,5 +270,13 @@ def slug(text):
     """
     slug = re.sub('[^a-z0-9]+', '-', text.lower())
     return slug.strip('-')
+
+def create_configuration_directory():
+    """
+    Make sure Redock's local configuration directory exists.
+    """
+    if not os.path.isdir(REDOCK_CONFIG_DIR):
+        logger.info("Creating directory: %s", format_path(REDOCK_CONFIG_DIR))
+        os.makedirs(REDOCK_CONFIG_DIR)
 
 # vim: ts=4 sw=4 et
