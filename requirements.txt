@@ -5,5 +5,5 @@ humanfriendly==1.5
 naturalsort==1.0.3
 netifaces==0.8
 requests==1.2.3
-update-dotdee==1.0.4
+update-dotdee==1.0.5
 verboselogs==1.0.1

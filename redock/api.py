@@ -265,6 +265,7 @@ class Container(object):
         .. _update-dotdee: https://pypi.python.org/pypi/update-dotdee
         """
         self.logger.verbose("Configuring SSH access ..")
+        self.update_dotdee.create_directory()
         with open(self.ssh_config_file, 'w') as handle:
             handle.write(textwrap.dedent("""
                 Host {alias}
