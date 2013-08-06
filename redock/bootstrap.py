@@ -1,7 +1,7 @@
 # Minimal configuration management specialized to Ubuntu (Debian).
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 15, 2013
+# Last Change: August 6, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -49,10 +49,12 @@ from execnet import makegateway
 from humanfriendly import Timer
 
 # Modules included in our package.
-from redock.logger import logger
+from redock.logger import get_logger
 from redock.utils import quote_command_line
 
 MIRROR_FILE = os.path.expanduser('~/.redock/ubuntu-mirror.txt')
+
+logger = get_logger(__name__)
 
 class Bootstrap(object):
 
@@ -71,9 +73,11 @@ class Bootstrap(object):
         """
         self.logger = logger
         self.ssh_alias = ssh_alias
+        # TODO Weaken requirement to just having "some version" of Python installed?
         self.logger.info("%s: Making sure the `python2.7' package is installed ..", self.ssh_alias)
         self.install_packages('python2.7')
         self.logger.info("%s: Initializing execnet over SSH connection ..", self.ssh_alias)
+        # TODO Support sudo using makegateway('ssh=%s//python=sudo python')
         self.gateway = makegateway("ssh=%s" % self.ssh_alias)
 
     def upload_file(self, pathname, contents):

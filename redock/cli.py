@@ -1,7 +1,7 @@
 # Command line interface for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 16, 2013
+# Last Change: August 6, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -13,6 +13,7 @@ import sys
 import textwrap
 
 # External dependencies.
+import coloredlogs
 from humanfriendly import Timer
 
 # Modules included in our package.
@@ -25,6 +26,8 @@ def main():
     """
     Command line interface for the ``redock`` program.
     """
+    # Initialize coloredlogs.
+    coloredlogs.install()
     # Parse and validate the command line arguments.
     try:
         # Command line option defaults.
