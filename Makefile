@@ -1,7 +1,7 @@
 # Makefile for Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 15, 2013
+# Last Change: September 26, 2013
 # URL: https://github.com/xolox/python-redock
 
 default:
@@ -19,14 +19,14 @@ test:
 	python setup.py test
 
 clean:
-	rm -Rf build dist docs/build *.egg-info
-	rm -Rf ~/.pip-accel/binaries/redock:*.tar.gz
+	rm -Rf .tox build dist docs/build *.egg *.egg-info
 
 reset: clean
 	rm -Rf $(WORKON_HOME)/redock
 	virtualenv $(WORKON_HOME)/redock
 	$(WORKON_HOME)/redock/bin/pip install pip-accel
-	$(WORKON_HOME)/redock/bin/pip-accel install .
+	$(WORKON_HOME)/redock/bin/pip-accel install -r requirements.txt
+	$(WORKON_HOME)/redock/bin/pip install .
 
 docs:
 	cd docs && make html

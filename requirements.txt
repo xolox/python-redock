@@ -1,5 +1,5 @@
 coloredlogs >= 0.4.3
-docker-py == 0.1.2
+docker-py == 0.2.0
 execnet == 1.1
 humanfriendly >= 1.5
 naturalsort >= 1.0.3

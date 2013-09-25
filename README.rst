@@ -53,12 +53,19 @@ There's one thing I should probably mention here as a disclaimer: Redock
 rewrites your SSH configuration (``~/.ssh/config``) using update-dotdee_. I've
 tested this a fair bit, but it's always a good idea to keep backups (hint).
 
+I'm currently using Redock on Ubuntu 12.04 with Docker 0.6.3 and a Linux 3.8.0
+kernel (as suggested in Docker's `installation instructions`_ for Ubuntu). I've
+only just switched to these versions and it seems they may have solved the
+stability issues I mentioned above (time will tell :-).
+
 Usage
 -----
 
 You will need to have Docker_ installed before you can use Redock, please refer
-to Docker's `installation instructions`_. After you've installed Docker you can
-install Redock using the following command::
+to Docker's `installation instructions`_. You may also want to add your user
+account to the ``docker`` group so you can connect to Docker without ``sudo``
+(this took me a while to realize when I switched to Docker 0.6 :-). After
+you've installed Docker you can install Redock using the following command::
 
     $ pip install redock
 
