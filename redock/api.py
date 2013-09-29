@@ -1,7 +1,7 @@
 # Main API for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 16, 2013
+# Last Change: September 30, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -26,15 +26,16 @@ import time
 import docker
 import humanfriendly
 import update_dotdee
+import verboselogs
 
-# Initialize the logger.
-from redock.logger import get_logger
+# Modules included in our package.
 from redock.base import BASE_IMAGE_NAME, find_base_image
 from redock.utils import (PRIVATE_SSH_KEY, Config, RemoteTerminal,
                           find_local_ip_addresses, quote_command_line,
                           slug, summarize_id)
 
-logger = get_logger(__name__)
+# Initialize a logger for this module.
+logger = verboselogs.VerboseLogger(__name__)
 
 class Container(object):
 

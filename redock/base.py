@@ -1,7 +1,7 @@
 # Initialization of the base image used by Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: July 15, 2013
+# Last Change: September 30, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -16,14 +16,14 @@ import pipes
 
 # External dependencies.
 from humanfriendly import Timer
+from verboselogs import VerboseLogger
 
 # Modules included in our package.
-from redock.logger import get_logger
 from redock.utils import (RemoteTerminal, get_ssh_public_key,
                           select_ubuntu_mirror, summarize_id)
 
-# The logger for this module.
-logger = get_logger(__name__)
+# Initialize a logger for this module.
+logger = VerboseLogger(__name__)
 
 # The repository and tag of Redock's base image.
 BASE_IMAGE_REPO = 'redock'

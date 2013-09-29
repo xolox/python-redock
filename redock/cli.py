@@ -1,7 +1,7 @@
 # Command line interface for Redock, a human friendly wrapper around Docker.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: August 6, 2013
+# Last Change: September 30, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -18,9 +18,9 @@ from humanfriendly import Timer
 
 # Modules included in our package.
 from redock.api import Container, Image
-from redock.logger import get_logger, root_logger
 
-logger = get_logger(__name__)
+# Initialize a logger for this module.
+logger = logging.getLogger(__name__)
 
 def main():
     """
@@ -42,10 +42,7 @@ def main():
             elif option in ('-m', '--message'):
                 message = value
             elif option in ('-v', '--verbose'):
-                if root_logger.getEffectiveLevel() == logging.INFO:
-                    root_logger.setLevel(logging.VERBOSE)
-                elif root_logger.getEffectiveLevel() == logging.VERBOSE:
-                    root_logger.setLevel(logging.DEBUG)
+                coloredlogs.increase_verbosity()
             elif option in ('-h', '--help'):
                 usage()
                 return

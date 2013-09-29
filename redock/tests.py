@@ -1,7 +1,7 @@
 # Tests for Redock.
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: August 6, 2013
+# Last Change: September 30, 2013
 # URL: https://github.com/xolox/python-redock
 
 # Standard library modules.
@@ -15,13 +15,12 @@ import coloredlogs
 
 # Modules included in our package.
 from redock.api import Container, Image
-from redock.logger import root_logger
 
 class RedockTestCase(unittest.TestCase):
 
     def setUp(self):
         coloredlogs.install()
-        root_logger.setLevel(logging.DEBUG)
+        coloredlogs.set_level(logging.DEBUG)
 
     def test_image_coercion(self):
         image = Image.coerce('redock:test')

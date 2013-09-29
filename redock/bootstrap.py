@@ -1,7 +1,7 @@
 # Minimal configuration management specialized to Ubuntu (Debian).
 #
 # Author: Peter Odding <peter@peterodding.com>
-# Last Change: August 6, 2013
+# Last Change: September 30, 2013
 # URL: https://github.com/xolox/python-redock
 
 """
@@ -47,14 +47,15 @@ import subprocess
 # External dependencies.
 from execnet import makegateway
 from humanfriendly import Timer
+from verboselogs import VerboseLogger
 
 # Modules included in our package.
-from redock.logger import get_logger
 from redock.utils import quote_command_line
 
 MIRROR_FILE = os.path.expanduser('~/.redock/ubuntu-mirror.txt')
 
-logger = get_logger(__name__)
+# Initialize a logger for this module.
+logger = VerboseLogger(__name__)
 
 class Bootstrap(object):
 
